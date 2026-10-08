@@ -35,16 +35,36 @@ jobs:
           ./deps/prepare_alpine_rootfs.sh
           ./deps/build_rclone_ios.sh
 
-      - name: Build Minis
+      - name: Archive Minis
         run: |
-          xcodebuild \
+          rm -rf build/Minis.xcarchive
+          xcodebuild archive \
             -project src/ios/Minis.xcodeproj \
             -scheme Minis \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -configuration Debug \
+            -archivePath "$PWD/build/Minis.xcarchive" \
             CODE_SIGNING_ALLOWED=NO \
-            build | tee /tmp/xcodebuild.log
+            CODE_SIGNING_REQUIRED=NO \
+            archive | tee /tmp/xcodebuild-archive.log
 
-          test "${PIPESTATUS[0]}" -eq 0 || { cat /tmp/xcodebuild.log; exit 1; }
+          test "${PIPESTATUS[0]}" -eq 0 || { cat /tmp/xcodebuild-archive.log; exit 1; }
+          test -d build/Minis.xcarchive/Products/Applications/Minis.app
+
+      - name: Package unsigned IPA
+        run: |
+          rm -rf build/Payload build/OpenMinis-assistant-response-edit.ipa
+          mkdir -p build/Payload
+          cp -R build/Minis.xcarchive/Products/Applications/Minis.app build/Payload/Minis.app
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent build/Payload build/OpenMinis-assistant-response-edit.ipa
+          ls -lh build/OpenMinis-assistant-response-edit.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenMinis-assistant-response-edit-ipa
+          path: build/OpenMinis-assistant-response-edit.ipa
+          if-no-files-found: error
+          retention-days: 7
 
