@@ -23,10 +23,12 @@ jobs:
 
       - name: Build iSH and media dependencies
         run: |
-          brew install ninja llvm libarchive pkg-config meson go
+          brew install ninja llvm lld libarchive pkg-config meson go
           echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
-          export PATH="$(brew --prefix llvm)/bin:$PATH"
-          export LDFLAGS="-L$(brew --prefix llvm)/lib"
+          echo "$(brew --prefix lld)/bin" >> "$GITHUB_PATH"
+          export PATH="$(brew --prefix llvm)/bin:$(brew --prefix lld)/bin:$PATH"
+          export LDFLAGS="-L$(brew --prefix llvm)/lib -L$(brew --prefix lld)/lib"
+          clang -target aarch64-linux-gnu -fuse-ld=lld -Wl,--version
           ./deps/build_lame.sh
           ./deps/build_ffmpeg.sh
           ./deps/build_ish.sh
@@ -37,8 +39,8 @@ jobs:
           xcodebuild \
             -project src/ios/Minis.xcodeproj \
             -scheme Minis \
-            -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             build | tee /tmp/xcodebuild.log
