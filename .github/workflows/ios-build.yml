@@ -15,6 +15,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Test standalone storage
+        run: python3 scripts/test_standalone_storage.py
+
       - name: Prepare build inputs
         run: |
           cp src/ios/Configs/ProviderCustomization.xcconfig.example \
@@ -47,7 +50,8 @@ jobs:
             -archivePath "$PWD/build/Minis.xcarchive" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            archive | tee /tmp/xcodebuild-archive.log
+            CURRENT_PROJECT_VERSION=11402 \
+            | tee /tmp/xcodebuild-archive.log
 
           test "${PIPESTATUS[0]}" -eq 0 || { cat /tmp/xcodebuild-archive.log; exit 1; }
           test -d build/Minis.xcarchive/Products/Applications/Minis.app

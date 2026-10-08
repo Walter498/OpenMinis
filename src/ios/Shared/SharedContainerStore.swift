@@ -5,6 +5,27 @@ import Foundation
 enum SharedContainerStore {
     static let appGroupID = "group.com.openminis.app"
 
+    static let appGroupContainer = FileManager.default.containerURL(
+        forSecurityApplicationGroupIdentifier: appGroupID
+    )
+
+    /// Keep the selected root stable for the lifetime of this process. A
+    /// sideloaded build may not have an App Group entitlement after re-signing.
+    /// Its main-app data still needs a persistent home inside its own sandbox.
+    static let storageContainerRoot: URL = {
+        let fm = FileManager.default
+        let root = resolvedStorageRoot(
+            groupContainer: appGroupContainer,
+            libraryDirectory: fm.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+        )
+        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }()
+
+    static func resolvedStorageRoot(groupContainer: URL?, libraryDirectory: URL) -> URL {
+        groupContainer ?? libraryDirectory.appendingPathComponent("MinisStandaloneStorage", isDirectory: true)
+    }
+
     private static let pendingShareKey = "pendingShare"
 
     static var sharedDefaults: UserDefaults? {

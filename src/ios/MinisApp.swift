@@ -865,6 +865,14 @@ struct MinisApp: App {
             lifecycleLog.info("[FileProvider] cleaned up stale workingSet directory")
         }
 
+        // A main-app sandbox fallback is persistent but cannot be shared with
+        // the FileProvider process. Leave Files integration unregistered until
+        // re-signing restores the actual App Group entitlement.
+        guard SharedContainerStore.appGroupContainer != nil else {
+            lifecycleLog.info("[FileProvider] local storage active — App Group absent; skipping domain registration")
+            return
+        }
+
         let defaults = UserDefaults.standard
         let lastReset = defaults.integer(forKey: fileProviderResetKey)
         let needsForceReset = lastReset < fileProviderResetGeneration
@@ -1162,7 +1170,7 @@ struct MinisApp: App {
     private static func migrateSharedDirToAppGroup() {
         let fm = FileManager.default
         let library = fm.urls(for: .libraryDirectory, in: .userDomainMask).first!
-        let container = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.com.openminis.app")!
+        let container = SharedContainerStore.storageContainerRoot
 
         let migrations: [(source: URL, dest: URL, label: String)] = [
             // Legacy Library/MinisChat/shared → new shared
