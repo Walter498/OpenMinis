@@ -44,6 +44,7 @@ struct CollectionViewMessageListV3: UIViewControllerRepresentable {
     /// [T-ios-assistant-header-open-soul] Tap on the assistant identity row.
     var onOpenSoulSettings: (() -> Void)?
     var onEdit: ((UUID) -> Void)?
+    var onEditAssistant: ((UUID) -> Void)? = nil
     var onDeleteFrom: ((UUID) -> Void)?
     var onWithdraw: ((UUID) -> Void)?
     var onResume: (() -> Void)?
@@ -90,6 +91,7 @@ struct CollectionViewMessageListV3: UIViewControllerRepresentable {
         coord.onOpenSoulSettings = onOpenSoulSettings
         coord.onRetryLast = onRetryLast
         coord.onEdit = onEdit
+        coord.onEditAssistant = onEditAssistant
         coord.onDeleteFrom = onDeleteFrom
         coord.onWithdraw = onWithdraw
         coord.onResume = onResume
@@ -367,6 +369,13 @@ private struct BridgedAssistantBlockV3: View {
                     } label: {
                         Label(AppLocalized("Copy as Markdown"), systemImage: "text.quote")
                     }
+                    if let onEditAssistant = bridge.onEditAssistant {
+                        Button {
+                            onEditAssistant()
+                        } label: {
+                            Label(AppLocalized("Edit Response"), systemImage: "square.and.pencil")
+                        }
+                    }
                     if let onReadAloud = bridge.onReadAloud {
                         Button {
                             onReadAloud()
@@ -541,6 +550,13 @@ private struct BridgedAssistantFooterV3: View {
                         UIPasteboard.general.string = text
                     } label: {
                         Label(AppLocalized("Copy as Markdown"), systemImage: "text.quote")
+                    }
+                    if let onEditAssistant = bridge.onEditAssistant {
+                        Button {
+                            onEditAssistant()
+                        } label: {
+                            Label(AppLocalized("Edit Response"), systemImage: "square.and.pencil")
+                        }
                     }
                     if let onReadAloud = bridge.onReadAloud {
                         Button {
@@ -877,6 +893,7 @@ extension CollectionViewMessageListV3 {
         var onOpenSoulSettings: (() -> Void)?
         var onRetryLast: (() -> Void)?
         var onEdit: ((UUID) -> Void)?
+        var onEditAssistant: ((UUID) -> Void)?
         var onDeleteFrom: ((UUID) -> Void)?
         var onWithdraw: ((UUID) -> Void)?
         var onResume: (() -> Void)?
@@ -1719,6 +1736,7 @@ extension CollectionViewMessageListV3 {
             let retryMsg = onRetryMessage
             let retryLast = onRetryLast
             let edit = onEdit
+            let editAssistant = onEditAssistant
             let deleteFrom = onDeleteFrom
             let compact = onCompact
             let forceSync = onForceSync
@@ -1737,7 +1755,7 @@ extension CollectionViewMessageListV3 {
             }
 
             if message.isCompactedHistory || message.role == .compactDivider || message.role == .systemInfo {
-                bridge.onRetry = nil; bridge.onEdit = nil; bridge.onCompact = nil
+                bridge.onRetry = nil; bridge.onEdit = nil; bridge.onEditAssistant = nil; bridge.onCompact = nil
                 bridge.onDeleteFrom = nil
             } else if !vm.isProcessing && !vm.isCompacting {
                 if message.role == .user {
@@ -1748,6 +1766,8 @@ extension CollectionViewMessageListV3 {
                     bridge.onRetry = nil
                 }
                 bridge.onEdit = message.role == .user ? { edit?(message.id) } : nil
+                bridge.onEditAssistant = message.role == .assistant && vm.canEditAssistantMessage(message.id)
+                    ? { editAssistant?(message.id) } : nil
                 // [T-ios-delete-from-message] Same gate as Edit/Retry: user
                 // bubbles only, never while streaming or compacting, never on
                 // already-compacted history (its agentHistory anchor is gone).
@@ -1757,7 +1777,7 @@ extension CollectionViewMessageListV3 {
                     ? { deleteFrom?(message.id) } : nil
                 bridge.onCompact = { compact?(message.id) }
             } else {
-                bridge.onRetry = nil; bridge.onEdit = nil; bridge.onCompact = nil
+                bridge.onRetry = nil; bridge.onEdit = nil; bridge.onEditAssistant = nil; bridge.onCompact = nil
                 bridge.onDeleteFrom = nil
             }
 

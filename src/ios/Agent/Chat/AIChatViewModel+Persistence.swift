@@ -332,6 +332,8 @@ extension AIChatViewModel {
                     // existing assistant message AND extend the source-sort
                     // range so compact-marker resolution can map raw[i] back
                     // to this merged UI row even when i is mid-stream.
+                    assistant.sourceMessageCount += 1
+                    assistant.sourceMessageId = nil
                     let continuation = raw.toChatMessage(mediaResolver: resolver, showThinking: showThinking)
                     let textParts = raw.parts.compactMap { if case .text(let s) = $0 { return s }; return nil }
                     let textBlockSummary = continuation.blocks.enumerated().compactMap { (i, b) -> String? in
@@ -388,6 +390,7 @@ extension AIChatViewModel {
                 } else {
                     // First assistant message in this turn
                     let msg = raw.toChatMessage(mediaResolver: resolver, showThinking: showThinking)
+                    msg.sourceMessageId = raw.id
                     msg.sourceSortOrder = raw.sortOrder
                     msg.lastSourceSortOrder = raw.sortOrder
                     currentAssistant = msg

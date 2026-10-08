@@ -1,0 +1,44 @@
+name: iOS Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [assistant-response-edit]
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Prepare build inputs
+        run: |
+          cp src/ios/Configs/ProviderCustomization.xcconfig.example \
+             src/ios/Configs/ProviderCustomization.xcconfig
+          mkdir -p deps/frameworks build/frameworks deps/resources
+
+      - name: Build iSH and media dependencies
+        run: |
+          brew install ninja llvm libarchive pkg-config meson go
+          ./deps/build_lame.sh
+          ./deps/build_ffmpeg.sh
+          ./deps/build_ish.sh
+          ./deps/build_rclone_ios.sh
+
+      - name: Build Minis
+        run: |
+          xcodebuild \
+            -project src/ios/Minis.xcodeproj \
+            -scheme Minis \
+            -sdk iphonesimulator \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee /tmp/xcodebuild.log
+
+          test "${PIPESTATUS[0]}" -eq 0 || { cat /tmp/xcodebuild.log; exit 1; }
+

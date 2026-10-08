@@ -76,6 +76,13 @@ final class ChatMessage: Identifiable, ObservableObject {
     var systemIcon: String?
     /// LLM-generated compact summary (for display in info sheet on compact divider).
     var compactSummary: String?
+    /// Database id of the first raw message that contributed to this UI message.
+    /// Used when an assistant turn is edited in place.
+    var sourceMessageId: String?
+    /// Number of raw database messages folded into this UI message.
+    /// A value of one means its content can be edited without rewriting a
+    /// merged tool or continuation chain.
+    var sourceMessageCount: Int = 1
     /// sort_order of the FIRST raw message that contributed to this UI message.
     /// Used by Phase 2.5 to locate the compact divider position on reload.
     var sourceSortOrder: Int?

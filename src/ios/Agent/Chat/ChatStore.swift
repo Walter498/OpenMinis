@@ -3846,6 +3846,39 @@ actor ChatStore {
         sqlite3_finalize(stmt)
     }
 
+    /// [T-ios-edit-assistant] Rewrite one simple assistant text row in place.
+    /// The caller has already verified that the raw row contains only one text
+    /// part. This keeps the row's tool structure stable and clears stale usage
+    /// and provider reasoning metadata after the visible text changes.
+    func updateAssistantText(messageId: String, text: String) -> Bool {
+        let previewSession = sessionIdForMessage(messageId)
+        guard let raw = loadSingleMessage(id: messageId), raw.role == .assistant,
+              raw.parts.count == 1, case .text = raw.parts[0],
+              let data = try? JSONEncoder().encode([ContentPart.text(text)]),
+              let partsJSON = String(data: data, encoding: .utf8) else { return false }
+        let sql = "UPDATE messages SET parts_json = ?, token_usage = NULL, reasoning_content = NULL, reasoning_echo = NULL, updated_at = ?, part_flags = ? WHERE id = ?"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            sqlite3_finalize(stmt)
+            return false
+        }
+        sqlite3_bind_text(stmt, 1, (partsJSON as NSString).utf8String, -1, nil)
+        sqlite3_bind_double(stmt, 2, Date().timeIntervalSince1970)
+        sqlite3_bind_int64(stmt, 3, Int64(Self.partFlags(for: [.text(text)])))
+        sqlite3_bind_text(stmt, 4, (messageId as NSString).utf8String, -1, nil)
+        let ok = sqlite3_step(stmt) == SQLITE_DONE
+        sqlite3_finalize(stmt)
+        guard ok else { return false }
+        if let previewSession {
+            invalidateSessionListCache(sessionId: previewSession)
+            recomputeStoredPreview(sessionId: previewSession)
+        } else {
+            invalidateSessionListCache()
+        }
+        markDirty(recordType: "Message", recordId: messageId)
+        return true
+    }
+
     /// [T-ios-rerun-from-tool-block-position] Rewrite a single message row's
     /// parts in place. Used by retryFromToolBlock's sub-message cut: when the
     /// re-run anchor is a tool_use that is NOT the first block of its assistant

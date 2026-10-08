@@ -472,6 +472,8 @@ struct AIChatView: View {
     @State private var titlePillSession: ChatSession?
     /// Session being edited via the title-pill tap. Drives the SessionEditSheet.
     @State private var titlePillEditSession: ChatSession?
+    /// Assistant reply opened from the transcript context menu.
+    @State private var assistantEditTarget: AssistantEditTarget?
     /// Default chat title for sessions without a generated title. Sourced
     /// from SOUL.md (`name`), falls back to "Minis". Refreshed on .soulMdChanged.
     @State private var soulName: String = SoulStore.cachedMetadata.name.isEmpty
@@ -777,6 +779,15 @@ struct AIChatView: View {
                     refreshTitlePillSession()
                 }
                 titlePillEditSession = nil
+            }
+        }
+        .sheet(item: $assistantEditTarget) { target in
+            AssistantResponseEditSheet(initialText: target.text) { editedText in
+                Task {
+                    if await vm.saveAssistantMessageEdit(target.id, text: editedText) {
+                        assistantEditTarget = nil
+                    }
+                }
             }
         }
         .alert(AppLocalized("Force Pull Messages"), isPresented: $showForcePullConfirm) {
@@ -2760,6 +2771,10 @@ struct AIChatView: View {
                 onEdit: { [self] msgId in
                     vm.editMessage(msgId)
                     inputFocused = true
+                },
+                onEditAssistant: { [self] msgId in
+                    guard let text = vm.assistantMessageTextForEditing(msgId) else { return }
+                    assistantEditTarget = AssistantEditTarget(id: msgId, text: text)
                 },
                 onDeleteFrom: { vm.deleteFromMessage($0) },
                 onWithdraw: { vm.withdrawQueuedMessage($0) },
@@ -4933,6 +4948,45 @@ struct AIChatView: View {
         hSizeClass == .regular ? 900 : nil
     }
 
+}
+
+struct AssistantEditTarget: Identifiable {
+    let id: UUID
+    let text: String
+}
+
+struct AssistantResponseEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var text: String
+    let onSave: (String) -> Void
+
+    init(initialText: String, onSave: @escaping (String) -> Void) {
+        _text = State(initialValue: initialText)
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $text)
+                .font(.body)
+                .padding(.horizontal, 8)
+                .navigationTitle(AppLocalized("Edit Response"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(AppLocalized("Cancel")) { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(AppLocalized("Save")) {
+                            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !value.isEmpty else { return }
+                            onSave(value)
+                        }
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+        }
+    }
 }
 
 // MARK: - Composer Surface

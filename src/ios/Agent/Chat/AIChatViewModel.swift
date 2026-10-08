@@ -4563,6 +4563,82 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         }
     }
 
+    /// True when an assistant reply is a single completed text row that can
+    /// be rewritten without changing tool-call or reasoning structure.
+    func canEditAssistantMessage(_ messageId: UUID) -> Bool {
+        guard !isProcessing,
+              let message = messages.first(where: { $0.id == messageId }),
+              message.role == .assistant,
+              !message.isCompactedHistory,
+              message.sourceMessageCount == 1,
+              let sourceId = message.sourceMessageId,
+              let historyIndex = agentHistory.firstIndex(where: { $0.dbMessageId == sourceId }) else {
+            return false
+        }
+        let entry = agentHistory[historyIndex]
+        guard entry.role == .assistant,
+              entry.parts.count == 1,
+              entry.reasoningContent == nil,
+              entry.reasoningEcho == nil,
+              case .text(let text) = entry.parts[0],
+              !text.isEmpty,
+              RawMessage.stripSystemReminders(text) == text else {
+            return false
+        }
+        return message.blocks.allSatisfy { $0.kind == .text }
+    }
+
+    /// Return the model-facing text for the assistant editor. Keeping this
+    /// value in agentHistory avoids editing a display-only transformed string.
+    func assistantMessageTextForEditing(_ messageId: UUID) -> String? {
+        guard canEditAssistantMessage(messageId),
+              let message = messages.first(where: { $0.id == messageId }),
+              let sourceId = message.sourceMessageId,
+              let entry = agentHistory.first(where: { $0.dbMessageId == sourceId }),
+              case .text(let text) = entry.parts[0] else { return nil }
+        return text
+    }
+
+    /// Persist an edited assistant reply while retaining every message after it.
+    /// The rewritten text becomes the assistant turn sent on the next request.
+    func saveAssistantMessageEdit(_ messageId: UUID, text: String) async -> Bool {
+        let editedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !editedText.isEmpty,
+              canEditAssistantMessage(messageId),
+              let messageIndex = messages.firstIndex(where: { $0.id == messageId }),
+              let sourceId = messages[messageIndex].sourceMessageId,
+              let historyIndex = agentHistory.firstIndex(where: { $0.dbMessageId == sourceId }) else {
+            return false
+        }
+        let oldEntry = agentHistory[historyIndex]
+        guard case .text = oldEntry.parts[0] else { return false }
+        var updatedEntry = oldEntry
+        updatedEntry.parts = [.text(editedText)]
+        updatedEntry.reasoningContent = nil
+        updatedEntry.reasoningEcho = nil
+        agentHistory[historyIndex] = updatedEntry
+
+        let persisted = await ChatStore.shared.updateAssistantText(messageId: sourceId, text: editedText)
+        guard persisted else {
+            agentHistory[historyIndex] = oldEntry
+            return false
+        }
+
+        let message = messages[messageIndex]
+        message.content = editedText
+        message.blocks = RawMessage.splitLongAssistantText(editedText).map {
+            AssistantBlock(kind: .text, content: $0)
+        }
+        message.usage = nil
+        message.completedAt = nil
+        message.error = nil
+        message.streamInterruptCount = 0
+        keepAliveHistory = nil
+        retrySnapshotReloadSignal.send()
+        logger.info("✏️ assistant response edited id=\(sourceId.prefix(8)) chars=\(editedText.count)")
+        return true
+    }
+
     /// Populate the input bar with the content of a user message for editing.
     /// The next call to send() will truncate the conversation from this message
     /// and re-run the agent loop with the edited content.
@@ -7277,6 +7353,10 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                 if let persistedId = await persistAgentMessage(assistantMessage, tokenUsage: turnUsage, thoughtSignatures: sigMap, streamInterruptCount: interruptCount, modelEntryId: activeEntryId),
                    assistantAgentIdx < agentHistory.count {
                     agentHistory[assistantAgentIdx].dbMessageId = persistedId
+                    if msgIdx < messages.count {
+                        messages[msgIdx].sourceMessageId = persistedId
+                        messages[msgIdx].sourceMessageCount = 1
+                    }
                     // [T-error-persist-ios] Persist this turn's error state AFTER the
                     // row exists + dbMessageId is assigned, keyed by that id, so the
                     // indicator survives reload. Write UNCONDITIONALLY (incl. nil) so a
