@@ -24,6 +24,9 @@ jobs:
       - name: Build iSH and media dependencies
         run: |
           brew install ninja llvm libarchive pkg-config meson go
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          export PATH="$(brew --prefix llvm)/bin:$PATH"
+          export LDFLAGS="-L$(brew --prefix llvm)/lib"
           ./deps/build_lame.sh
           ./deps/build_ffmpeg.sh
           ./deps/build_ish.sh
