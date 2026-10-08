@@ -32,6 +32,7 @@ jobs:
           ./deps/build_lame.sh
           ./deps/build_ffmpeg.sh
           ./deps/build_ish.sh
+          ./deps/prepare_alpine_rootfs.sh
           ./deps/build_rclone_ios.sh
 
       - name: Build Minis
