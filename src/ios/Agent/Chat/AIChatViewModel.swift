@@ -4633,7 +4633,7 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         message.completedAt = nil
         message.error = nil
         message.streamInterruptCount = 0
-        keepAliveHistory = nil
+        keepAliveHistory.removeAll()
         retrySnapshotReloadSignal.send()
         logger.info("✏️ assistant response edited id=\(sourceId.prefix(8)) chars=\(editedText.count)")
         return true
